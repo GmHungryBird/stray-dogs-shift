@@ -129,6 +129,42 @@
   .detail-in .row .time{color:var(--muted);font-size:12px}
   .hint{font-size:11.5px;color:var(--muted);text-align:center;padding:10px 0 2px}
 
+  .searchbar{display:flex;align-items:center;gap:10px;margin:0 0 12px;
+    background:var(--card);border:1.5px solid var(--line);border-radius:12px;
+    padding:0 14px;color:var(--muted)}
+  .searchbar input{flex:1;border:none;background:transparent;padding:11px 0;
+    font:inherit;font-size:14px;color:var(--ink);min-width:0}
+  .searchbar input:focus{outline:none}
+  .searchbar:focus-within{border-color:var(--accent)}
+  table.person{min-width:0}
+  td.person-cell{padding:0;border:none;text-align:left}
+  .person-head{display:flex;justify-content:space-between;align-items:center;
+    padding:14px 14px 6px}
+  .person-head .n{font-family:'Barlow Condensed';font-weight:700;font-size:22px;
+    letter-spacing:.03em;line-height:1}
+  .person-head .p{font-size:12px;color:var(--muted);margin-top:3px}
+  .back-btn{border:1.5px solid var(--line);background:var(--card);border-radius:999px;
+    padding:8px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;
+    font-family:'Barlow',sans-serif}
+  .back-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  td.empty{padding:20px;text-align:center;color:var(--muted);font-size:13px;border-bottom:none}
+  @media (max-width:480px){
+    .wrap{padding:0 10px 44px}
+    header{padding:16px 0 12px;gap:10px}
+    .tag{font-size:18px;padding:5px 12px 6px}
+    h1{font-size:15px}
+    .tab{font-size:15px;padding:10px 6px}
+    .week-chip,.month-chip{font-size:12.5px;padding:6px 11px}
+    .lg{font-size:11px;padding:3px 8px 3px 4px}
+    table{min-width:500px}
+    th.name-h, td.name{min-width:96px;padding-left:10px}
+    td.name .n{font-size:13px}
+    td.name .p{font-size:10px}
+    .chip{min-width:29px;font-size:11px;padding:4px 3px}
+    thead th{font-size:11.5px;padding:8px 3px 7px}
+    td.cell{padding:5px 2px}
+    .detail-in .row{font-size:12.5px;padding:7px 10px}
+  }
   .badge-demo{display:inline-block;font-size:10.5px;font-weight:700;
     letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);
     border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:middle}
@@ -155,6 +191,11 @@
   <div class="weeks" id="weeks"></div>
   <div class="legend" id="legend"></div>
   <div class="err" id="err"></div>
+
+  <div class="searchbar">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="Cari nama staf…" autocomplete="off" aria-label="Cari nama staf">
+  </div>
 
   <div class="board">
     <div class="scroll"><table id="grid"></table></div>
@@ -278,7 +319,7 @@ kitchen: [
 const DAYNAMES = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
 const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni",
                    "Juli","Agustus","September","Oktober","November","Desember"];
-let state = { div:"foh", monthIdx:0, weekIdx:0, groups:[], open:null };
+let state = { div:"foh", monthIdx:0, weekIdx:0, groups:[], person:null, search:"" };
 
 function todayKey(){
   const t = new Date();
@@ -331,7 +372,7 @@ function renderMonths(){
     const b = document.createElement("button");
     b.className = "month-chip" + (i===state.monthIdx?" active":"");
     b.textContent = g.label;
-    b.onclick = ()=>{ state.monthIdx=i; state.weekIdx=0; state.open=null; renderAll(); };
+    b.onclick = ()=>{ state.monthIdx=i; state.weekIdx=0; renderAll(); };
     el.appendChild(b);
   });
 }
@@ -342,7 +383,7 @@ function renderWeeks(){
     const b = document.createElement("button");
     b.className = "week-chip" + (i===state.weekIdx?" active":"");
     b.textContent = `Minggu ${i+1} · ${w.dates[0]}–${w.dates[w.dates.length-1]}`;
-    b.onclick = ()=>{ state.weekIdx=i; state.open=null; renderAll(); };
+    b.onclick = ()=>{ state.weekIdx=i; renderAll(); };
     el.appendChild(b);
   });
 }
@@ -361,41 +402,63 @@ function renderGrid(){
   const w = curWeek();
   const tk = todayKey();
   const grid = document.getElementById("grid");
-  let html = `<thead><tr><th class="name-h">Nama</th>`;
-  w.dates.forEach(d=>{
-    const t = d===tk ? " today" : "";
-    html += `<th class="${t}">${dayName(d)}<span class="d">${d.slice(0,2)}</span></th>`;
-  });
-  html += `</tr></thead><tbody>`;
-  w.rows.forEach((r,ri)=>{
-    const [name,pos,...shifts] = r;
-    html += `<tr><td class="name" data-row="${ri}">
-      <div class="n">${name}</div><div class="p">${pos}</div></td>`;
-    shifts.forEach((s,si)=>{
-      const t = w.dates[si]===tk ? " today" : "";
-      html += `<td class="cell${t}">${chip(s)}</td>`;
-    });
-    html += `</tr>`;
-    if(state.open===ri){
+  const q = (state.search||"").trim().toLowerCase();
+
+  /* ---- MODE PER-ORANG: hanya jadwal 1 staf ---- */
+  if(state.person){
+    const r = w.rows.find(x => x[0] === state.person);
+    if(r){
       const times = TIMES[state.div];
-      let rows = shifts.map((s,si)=>{
+      const [name,pos,...shifts] = r;
+      const rows = shifts.map((s,si)=>{
         const c=(s||"").toUpperCase().trim();
         const time = times[c] ? times[c] : (c==="AL"?"Annual Leave":c==="OFF"?"Libur":"–");
         const t = w.dates[si]===tk ? " today":"";
         return `<div class="row${t}"><span class="day">${dayName(w.dates[si])} ${w.dates[si]}</span>
                 <span>${chip(s)}</span><span class="time">${time}</span></div>`;
       }).join("");
-      html += `<tr class="detail"><td colspan="${w.dates.length+1}"><div class="detail-in">${rows}</div></td></tr>`;
+      grid.className = "person";
+      grid.innerHTML = `<tbody><tr><td class="person-cell">
+        <div class="person-head">
+          <div><div class="n">${name}</div><div class="p">${pos}</div></div>
+          <button class="back-btn" id="backAll">← Semua staf</button>
+        </div>
+        <div class="detail-in">${rows}</div>
+      </td></tr></tbody>`;
+      document.getElementById("backAll").onclick = ()=>{ state.person=null; renderGrid(); };
+      return;
     }
+    state.person = null; // staf tidak ada di minggu/divisi ini → kembali ke daftar
+  }
+
+  /* ---- MODE DAFTAR (dengan filter cari nama) ---- */
+  grid.className = "";
+  let rowsData = w.rows;
+  if(q) rowsData = rowsData.filter(r => String(r[0]).toLowerCase().includes(q));
+
+  let html = `<thead><tr><th class="name-h">Nama</th>`;
+  w.dates.forEach(d=>{
+    const t = d===tk ? " today" : "";
+    html += `<th class="${t}">${dayName(d)}<span class="d">${d.slice(0,2)}</span></th>`;
   });
+  html += `</tr></thead><tbody>`;
+  rowsData.forEach(r=>{
+    const [name,pos,...shifts] = r;
+    html += `<tr><td class="name" data-name="${name}">
+      <div class="n">${name}</div><div class="p">${pos}</div></td>`;
+    shifts.forEach((s,si)=>{
+      const t = w.dates[si]===tk ? " today" : "";
+      html += `<td class="cell${t}">${chip(s)}</td>`;
+    });
+    html += `</tr>`;
+  });
+  if(!rowsData.length){
+    html += `<tr><td class="empty" colspan="${w.dates.length+1}">Tidak ada nama yang cocok</td></tr>`;
+  }
   html += `</tbody>`;
   grid.innerHTML = html;
   grid.querySelectorAll("td.name").forEach(td=>{
-    td.onclick = ()=>{
-      const ri = Number(td.dataset.row);
-      state.open = state.open===ri ? null : ri;
-      renderGrid();
-    };
+    td.onclick = ()=>{ state.person = td.dataset.name; renderGrid(); };
   });
 }
 function renderAll(){ renderMonths(); renderWeeks(); renderLegend(); renderGrid(); }
@@ -504,7 +567,7 @@ async function loadData(){
   return cache;
 }
 async function loadDivision(div){
-  state.div = div; state.open = null;
+  state.div = div; state.person = null;
   let weeks;
   if(CONFIG.sheetId){
     try{
@@ -541,6 +604,12 @@ document.querySelectorAll(".tab").forEach(btn=>{
     document.getElementById("err").style.display="none";
     loadDivision(btn.dataset.div);
   };
+});
+
+document.getElementById("search").addEventListener("input", e=>{
+  state.search = e.target.value;
+  state.person = null;
+  renderGrid();
 });
 
 loadDivision("foh");
