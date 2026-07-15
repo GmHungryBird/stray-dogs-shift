@@ -582,9 +582,15 @@ function parseGrid(grid, defaultDiv){
     if(isDateRow){
       let end = di;
       while(end < cells.length && isDate(cells[end])) end++;
+      // deteksi divisi dari label kolom di header ("Department" / "Position")
+      // — tidak bergantung baris judul terpisah, jadi tahan kalau baris judul hilang
+      const label = String(cells[di - 1] || "").trim();
+      let blockDiv = div;
+      if(/position/i.test(label)) blockDiv = "kitchen";
+      else if(/department|divisi/i.test(label)) blockDiv = "foh";
       cur = {dates: cells.slice(di, end).map(normDate), rows: []};
       col0 = di; nDays = cur.dates.length;
-      if(div) out[div].push(cur); else cur = null;
+      if(blockDiv){ out[blockDiv].push(cur); div = blockDiv; } else { cur = null; }
       return;
     }
     if(!cur) return;
