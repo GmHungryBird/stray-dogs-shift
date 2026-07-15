@@ -227,6 +227,10 @@ const CONFIG = {
      ("Juli", "Agustus", ...). Cocok untuk pola satu tab per bulan.
      Atau isi nama tab spesifik, mis. "JADWAL". */
   singleTab: "AUTO",
+  /* ID "Publish to the web" (File → Share → Publish to web → Link).
+     Dipakai sebagai jalur cadangan kalau jalur utama gagal.
+     Ambil bagian setelah /d/e/ dan sebelum /pubhtml. */
+  publishedId: "2PACX-1vTDzPCqGGc014yhb3HavYNYXE9wJKaXbkkV4SZYohMulYsRi2q2tHmXBUOI2TdwEE6ASQ2ikc1X8fPG",
   tabs: { foh: "FOH_BAR", kitchen: "KITCHEN" },
   year: 2026,                  // dipakai untuk deteksi "hari ini"
   /* Minggu depan yang belum mulai:
@@ -465,11 +469,11 @@ function renderAll(){ renderMonths(); renderWeeks(); renderLegend(); renderGrid(
 
 /* ===================== Google Sheets (gviz) ===================== */
 function normDate(s){
-  // "06/07" → apa adanya; "Date(2026,6,6)" (gviz) → "06/07"
+  // "06/07", "Sen 06/07", "06/07/2026" → "06/07"; "Date(2026,6,6)" (gviz) → "06/07"
   const m = /^Date\((\d+),(\d+),(\d+)/.exec(s);
   if(m) return String(m[3]).padStart(2,"0")+"/"+String(Number(m[2])+1).padStart(2,"0");
-  const p = s.split("/");
-  if(p.length>=2) return p[0].padStart(2,"0")+"/"+p[1].padStart(2,"0");
+  const d = /(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\s*$/.exec(String(s));
+  if(d) return d[1].padStart(2,"0")+"/"+d[2].padStart(2,"0");
   return s;
 }
 /* Pecah blok panjang (mis. 1 bulan penuh) jadi minggu-minggu, patah di hari Senin */
@@ -492,11 +496,68 @@ function splitWeeks(b){
   }
   return out;
 }
+/* CSV parser kecil (mendukung sel berkutip) */
+function parseCSV(text){
+  const rows=[]; let row=[], cell="", inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else inQ=false; }
+      else cell+=ch;
+    }else{
+      if(ch==='"') inQ=true;
+      else if(ch===','){ row.push(cell.trim()); cell=""; }
+      else if(ch==='\n'){ row.push(cell.trim()); rows.push(row); row=[]; cell=""; }
+      else if(ch!=='\r') cell+=ch;
+    }
+  }
+  if(cell!=="" || row.length){ row.push(cell.trim()); rows.push(row); }
+  return rows;
+}
+/* Peta nama tab → gid, diambil otomatis dari halaman publish */
+let _gidMap = null;
+async function publishedGid(tabName){
+  if(!_gidMap){
+    _gidMap = {};
+    try{
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/e/${CONFIG.publishedId}/pubhtml?widget=false&chrome=false&nocache=${Date.now()}`);
+      const html = await res.text();
+      const re = /sheet-button-(\d+)[^>]*>\s*<a[^>]*>([^<]+)</g;
+      let m; while((m = re.exec(html))) _gidMap[m[2].trim()] = m[1];
+      if(!Object.keys(_gidMap).length){
+        const one = /gid=(\d+)/.exec(html);
+        if(one) _gidMap["__only"] = one[1];
+      }
+    }catch(e){}
+  }
+  if(_gidMap[tabName] != null) return _gidMap[tabName];
+  if(_gidMap["__only"] != null) return _gidMap["__only"];
+  return null;
+}
 async function fetchGrid(tabName){
-  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(tabName)}`;
-  const txt = await (await fetch(url)).text();
-  const json = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}")+1));
-  return json.table.rows.map(r=>(r.c||[]).map(c=>(c&&c.v!=null)?String(c.v).trim():""));
+  let lastErr = "";
+  // JALUR 1 — gviz JSON (butuh: Share → Anyone with the link → Viewer)
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(tabName)}&nocache=${Date.now()}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const txt = await res.text();
+    const json = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}")+1));
+    if(!json.table) throw new Error((json.errors && json.errors[0] && json.errors[0].reason) || "tanpa tabel");
+    return json.table.rows.map(r=>(r.c||[]).map(c=>(c&&c.v!=null)?String(c.v).trim():""));
+  }catch(e){ lastErr = "jalur-1 gviz: " + e.message; }
+  // JALUR 2 — published CSV (butuh: File → Share → Publish to web)
+  if(CONFIG.publishedId){
+    try{
+      const gid = await publishedGid(tabName);
+      if(gid == null) throw new Error("tab '"+tabName+"' tidak ditemukan di publish");
+      const url = `https://docs.google.com/spreadsheets/d/e/${CONFIG.publishedId}/pub?output=csv&gid=${gid}&nocache=${Date.now()}`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      return parseCSV(await res.text());
+    }catch(e){ lastErr += " · jalur-2 publish: " + e.message; }
+  }
+  throw new Error(lastErr || "semua jalur gagal");
 }
 /* Baris judul divisi: baris pendek (≤2 sel terisi) berisi kata kunci */
 const SECTIONS = [
@@ -504,7 +565,7 @@ const SECTIONS = [
   {div:"kitchen", re:/KITCHEN|DAPUR/i}
 ];
 function parseGrid(grid, defaultDiv){
-  const isDate = s => /^Date\(/.test(s) || /^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(s);
+  const isDate = s => /^Date\(/.test(s) || /(^|\s)\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(String(s).trim());
   const out = {foh:[], kitchen:[]};
   let div = defaultDiv || null, cur = null, col0 = -1, nDays = 0;
   grid.forEach(cells=>{
@@ -576,7 +637,7 @@ async function loadDivision(div){
       document.getElementById("demoBadge").hidden = true;
     }catch(e){
       cache = null; // supaya percobaan berikutnya fetch ulang
-      showErr("Gagal memuat data dari Google Sheets — menampilkan data contoh. Cek: sheet di-share 'Anyone with link', nama tab sesuai CONFIG, dan ada baris judul divisi (FOH & BAR / KITCHEN).");
+      showErr("Gagal memuat data dari Google Sheets — menampilkan data contoh. Detail: " + (e && e.message ? e.message : e));
       weeks = DEMO[div];
       document.getElementById("demoBadge").hidden = false;
     }
