@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stray Dogs — Shift Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#17181c;
+    --paper:#fafaf7;
+    --card:#ffffff;
+    --line:#e4e2da;
+    --muted:#7a7a72;
+    --accent:#e4572e;        /* collar orange */
+    --m-bg:#fdf3d7;  --m-fg:#8a6100;  --m-bd:#f0d990;
+    --md-bg:#e2edfb; --md-fg:#1f5aa8; --md-bd:#bcd5f2;
+    --a-bg:#ece6f9;  --a-fg:#5b3fa8;  --a-bd:#d2c6ee;
+    --c-bg:#ddf1f0;  --c-fg:#0f6b68;  --c-bd:#b6dedc;
+    --al-bg:#e3f3e6; --al-fg:#2c7a42; --al-bd:#c0e2c8;
+    --off-bg:#f1f1ed;--off-fg:#9a9a92;--off-bd:#e0e0d8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper);color:var(--ink);
+    font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:820px;margin:0 auto;padding:0 14px 60px}
+
+  /* ---------- header ---------- */
+  header{padding:22px 0 14px;display:flex;align-items:center;gap:12px}
+  .tag{
+    background:var(--ink);color:var(--paper);
+    font-family:'Barlow Condensed';font-weight:700;font-size:22px;
+    letter-spacing:.06em;text-transform:uppercase;
+    padding:6px 14px 7px;border-radius:6px;position:relative;
+  }
+  .tag::after{ /* lubang dog-tag */
+    content:"";position:absolute;top:50%;right:6px;transform:translateY(-50%);
+    width:6px;height:6px;border-radius:50%;background:var(--paper);opacity:.9;
+  }
+  .tag span{padding-right:12px}
+  h1{font-family:'Barlow Condensed';font-weight:600;font-size:20px;
+    letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+
+  /* ---------- controls ---------- */
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+  .tab{
+    flex:1;text-align:center;padding:11px 8px;border-radius:10px;
+    border:1.5px solid var(--line);background:var(--card);cursor:pointer;
+    font-family:'Barlow Condensed';font-weight:700;font-size:17px;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+    transition:all .15s;
+  }
+  .tab.active{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .weeks{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px}
+  .months{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px}
+  .month-chip{
+    white-space:nowrap;padding:7px 14px;border-radius:999px;cursor:pointer;
+    border:1.5px solid var(--line);background:var(--card);
+    font-family:'Barlow Condensed';font-weight:700;font-size:15px;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--muted);transition:all .15s;
+  }
+  .month-chip.active{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .month-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .week-chip{
+    white-space:nowrap;padding:7px 13px;border-radius:999px;cursor:pointer;
+    border:1.5px solid var(--line);background:var(--card);
+    font-size:13px;font-weight:600;color:var(--muted);transition:all .15s;
+  }
+  .week-chip.active{border-color:var(--accent);color:var(--accent);background:#fdeee8}
+  .week-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 14px}
+  .lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+    color:var(--muted);background:var(--card);border:1px solid var(--line);
+    border-radius:999px;padding:4px 10px 4px 5px}
+  .lg b{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;border:1px solid}
+
+  /* ---------- grid ---------- */
+  .board{background:var(--card);border:1.5px solid var(--line);
+    border-radius:14px;overflow:hidden}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{border-collapse:separate;border-spacing:0;width:100%;min-width:560px}
+  th,td{padding:0;text-align:center}
+  thead th{
+    font-family:'Barlow Condensed';font-weight:600;font-size:13px;
+    letter-spacing:.05em;color:var(--muted);text-transform:uppercase;
+    padding:10px 4px 8px;border-bottom:1.5px solid var(--line);background:var(--card);
+  }
+  thead th .d{display:block;font-family:'Barlow';font-size:12px;font-weight:600;color:var(--ink)}
+  thead th.today{color:var(--accent)}
+  thead th.today .d{color:var(--accent)}
+  thead th.today::before{content:"HARI INI";display:block;font-size:9px;
+    letter-spacing:.12em;color:var(--accent);font-weight:700}
+  th.name-h{position:sticky;left:0;z-index:3;text-align:left;padding-left:14px;min-width:118px}
+  td.name{
+    position:sticky;left:0;z-index:2;background:var(--card);
+    text-align:left;padding:9px 8px 9px 14px;border-bottom:1px solid var(--line);
+    cursor:pointer;min-width:118px;
+  }
+  td.name .n{font-weight:600;font-size:14px;line-height:1.15}
+  td.name .p{font-size:11px;color:var(--muted)}
+  td.cell{border-bottom:1px solid var(--line);padding:6px 3px}
+  td.cell.today{background:#fdf5f1}
+  tr:last-child td{border-bottom:none}
+  .chip{
+    display:inline-block;min-width:34px;padding:5px 4px;border-radius:8px;
+    font-size:12px;font-weight:700;border:1px solid;letter-spacing:.02em;
+  }
+  .code-M{background:var(--m-bg);color:var(--m-fg);border-color:var(--m-bd)}
+  .code-MD{background:var(--md-bg);color:var(--md-fg);border-color:var(--md-bd)}
+  .code-A{background:var(--a-bg);color:var(--a-fg);border-color:var(--a-bd)}
+  .code-C{background:var(--c-bg);color:var(--c-fg);border-color:var(--c-bd)}
+  .code-AL{background:var(--al-bg);color:var(--al-fg);border-color:var(--al-bd)}
+  .code-OFF{background:var(--off-bg);color:var(--off-fg);border-color:var(--off-bd)}
+  .code-X{background:transparent;color:var(--off-fg);border-color:transparent}
+
+  /* ---------- personal detail ---------- */
+  tr.detail td{background:#fbfaf6;border-bottom:1px solid var(--line);padding:0}
+  .detail-in{padding:12px 14px;display:grid;gap:6px}
+  .detail-in .row{display:flex;justify-content:space-between;align-items:center;
+    font-size:13px;background:var(--card);border:1px solid var(--line);
+    border-radius:9px;padding:8px 12px}
+  .detail-in .row.today{border-color:var(--accent)}
+  .detail-in .row .day{font-weight:600}
+  .detail-in .row .time{color:var(--muted);font-size:12px}
+  .hint{font-size:11.5px;color:var(--muted);text-align:center;padding:10px 0 2px}
+
+  .badge-demo{display:inline-block;font-size:10.5px;font-weight:700;
+    letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);
+    border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  footer{margin-top:16px;text-align:center;font-size:12px;color:var(--muted)}
+  .err{background:#fdeee8;border:1px solid var(--accent);color:#9a3413;
+    border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:12px;display:none}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="tag"><span>Stray Dogs</span></div>
+    <h1>Shift Board <span id="demoBadge" class="badge-demo" hidden>Data contoh</span></h1>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-div="foh">FOH &amp; Bar</button>
+    <button class="tab" role="tab" data-div="kitchen">Kitchen</button>
+  </div>
+
+  <div class="months" id="months"></div>
+  <div class="weeks" id="weeks"></div>
+  <div class="legend" id="legend"></div>
+  <div class="err" id="err"></div>
+
+  <div class="board">
+    <div class="scroll"><table id="grid"></table></div>
+  </div>
+  <p class="hint">Ketuk nama untuk lihat jadwal pribadi</p>
+
+  <footer>Hungry Bird Group · jadwal diperbarui dari Google Sheets</footer>
+</div>
+
+<script>
+/* =========================================================
+   KONFIGURASI — isi SHEET_ID untuk mode live.
+   Format tiap tab — sama seperti layout jadwal kamu sekarang:
+   Baris header blok : No | Name | Department | 06/07 | 07/07 | ... (7 tanggal)
+   Baris staf        : 1 | Teguh | Bar | MD | M | ... (7 kode shift)
+   Satu blok = satu minggu. Minggu baru = tempel blok baru di bawah
+   (boleh dipisah baris kosong). Kolom "No" opsional.
+   Baris legend/catatan otomatis diabaikan.
+   Tips: format kolom tanggal sebagai Plain text di Sheets.
+   Spreadsheet harus di-share: Anyone with the link → Viewer.
+   ========================================================= */
+const CONFIG = {
+  sheetId: "1lxZeyaPp8iJWSSRRSv4koGv5589XWQvGatnVjYXNb0E",
+  /* mode "single": semua divisi dalam SATU tab, dipisah baris judul
+     ("FOH & BAR" di atas bloknya, "KITCHEN" di atas bloknya).
+     mode "tabs": tiap divisi punya tab sendiri (FOH_BAR & KITCHEN). */
+  mode: "single",
+  /* "AUTO" = baca tab bernama bulan berjalan + bulan sebelumnya
+     ("Juli", "Agustus", ...). Cocok untuk pola satu tab per bulan.
+     Atau isi nama tab spesifik, mis. "JADWAL". */
+  singleTab: "AUTO",
+  tabs: { foh: "FOH_BAR", kitchen: "KITCHEN" },
+  year: 2026,                  // dipakai untuk deteksi "hari ini"
+  /* Minggu depan yang belum mulai:
+     "filled" = tampil hanya kalau sudah ada shift terisi (disarankan)
+     "never"  = sembunyikan semua minggu yang belum mulai
+     "always" = tampilkan semua */
+  showFuture: "filled"
+};
+
+/* Legend per divisi */
+const LEGENDS = {
+  foh: [
+    {code:"M",  label:"Morning 06.00–14.00"},
+    {code:"MD", label:"Middle 09.00–17.00"},
+    {code:"A",  label:"Afternoon 14.00–22.00"},
+    {code:"OFF",label:"Libur"},
+    {code:"AL", label:"Annual Leave"},
+  ],
+  kitchen: [
+    {code:"M",  label:"Morning 06.00–14.00"},
+    {code:"MD", label:"Middle 08.00–16.00"},
+    {code:"C",  label:"Closing 10.00–18.00"},
+    {code:"OFF",label:"Libur"},
+    {code:"AL", label:"Annual Leave"},
+  ]
+};
+const TIMES = {
+  foh:     {M:"06.00–14.00", MD:"09.00–17.00", A:"14.00–22.00"},
+  kitchen: {M:"06.00–14.00", MD:"08.00–16.00", C:"10.00–18.00"}
+};
+
+/* ============== DATA CONTOH (fallback tanpa sheet) ============== */
+const DEMO = {
+foh: [
+ {label:"6–12 Juli 2026",
+  dates:["06/07","07/07","08/07","09/07","10/07","11/07","12/07"],
+  rows:[
+   ["Teguh","Bar","MD","MD","MD","M","MD","MD","OFF"],
+   ["Fadil","Bar","M","M","OFF","MD","M","MD","M"],
+   ["Fito","Bar","MD","MD","M","OFF","MD","M","AL"],
+   ["Dewa","All Round","MD","MD","M","MD","A","A","OFF"],
+   ["Ezra","Floor","MD","MD","MD","MD","M","OFF","MD"],
+   ["Yaya","Floor","M","M","MD","M","OFF","A","MD"],
+   ["Esy (DW)","Floor","OFF","MD","MD","MD","MD","M","M"],
+   ["Shelfia","All Round","M","OFF","MD","M","A","A","MD"],
+  ]},
+ {label:"13–19 Juli 2026",
+  dates:["13/07","14/07","15/07","16/07","17/07","18/07","19/07"],
+  rows:[
+   ["Teguh","Bar","MD","MD","MD","M","A","A","OFF"],
+   ["Fadil","Bar","M","M","OFF","MD","M","MD","M"],
+   ["Fito","Bar","AL","AL","AL","OFF","AL","AL","AL"],
+   ["Dewa","All Round","MD","M","M","MD","A","A","OFF"],
+   ["Ezra","Floor","MD","MD","MD","M","OFF","A","MD"],
+   ["Yaya","Floor","OFF","MD","MD","MD","MD","MD","MD"],
+   ["Esy (DW)","Floor","M","OFF","MD","MD","M","M","M"],
+   ["Shelfia","All Round","MD","MD","M","OFF","MD","M","MD"],
+  ]},
+],
+kitchen: [
+ {label:"6–12 Juli 2026",
+  dates:["06/07","07/07","08/07","09/07","10/07","11/07","12/07"],
+  rows:[
+   ["Komeng","Head Chef","M","M","M","OFF","C","C","C"],
+   ["Febby","Sous Chef","OFF","C","C","M","M","M","M"],
+   ["Agung","Commis 1","C","M","OFF","C","C","M","M"],
+   ["Dimas","Commis 1","M","OFF","C","M","M","C","C"],
+   ["Wisma","Commis 2","C","C","M","OFF","C","MD","M"],
+   ["Chris","Commis 2","C","M","OFF","C","MD","M","C"],
+   ["Bisma","Steward","OFF","C","M","M","C","C","M"],
+   ["Wahyu","Steward","M","OFF","C","C","M","M","C"],
+   ["Rasyid","Trainee","OFF","C","C","C","C","C","C"],
+  ]},
+ {label:"13–19 Juli 2026",
+  dates:["13/07","14/07","15/07","16/07","17/07","18/07","19/07"],
+  rows:[
+   ["Komeng","Head Chef","M","M","M","OFF","C","C","M"],
+   ["Febby","Sous Chef","M","OFF","C","C","M","M","C"],
+   ["Agung","Commis 1","C","C","C","M","C","M","OFF"],
+   ["Dimas","Commis 1","C","M","C","C","M","OFF","C"],
+   ["Wisma","Commis 2","C","C","M","OFF","C","MD","M"],
+   ["Chris","Commis 2","OFF","AL","AL","C","MD","C","C"],
+   ["Bisma","Steward","OFF","C","C","M","M","C","C"],
+   ["Wahyu","Steward","C","M","OFF","C","C","M","M"],
+   ["Rasyid","Trainee","M","C","M","M","OFF","C","C"],
+  ]},
+]};
+
+/* ===================== state & render ===================== */
+const DAYNAMES = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
+const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni",
+                   "Juli","Agustus","September","Oktober","November","Desember"];
+let state = { div:"foh", monthIdx:0, weekIdx:0, groups:[], open:null };
+
+function todayKey(){
+  const t = new Date();
+  return String(t.getDate()).padStart(2,"0")+"/"+String(t.getMonth()+1).padStart(2,"0");
+}
+function dayName(dm){
+  const [d,m] = dm.split("/").map(Number);
+  return DAYNAMES[new Date(CONFIG.year, m-1, d).getDay()];
+}
+/* Kelompokkan minggu ke bulan — bulan diambil dari tanggal pertama blok,
+   urutan mengikuti urutan blok di spreadsheet */
+function groupByMonth(weeks){
+  const groups = [];
+  weeks.forEach(w=>{
+    const m = Number(w.dates[0].split("/")[1]);
+    const label = (MONTHS_ID[m-1]||"Bulan") + " " + CONFIG.year;
+    let g = groups[groups.length-1];
+    if(!g || g.label!==label){ g = {label, weeks:[]}; groups.push(g); }
+    g.weeks.push(w);
+  });
+  return groups;
+}
+function pickCurrent(){
+  const tk = todayKey();
+  for(let mi=0; mi<state.groups.length; mi++){
+    const wi = state.groups[mi].weeks.findIndex(w=>w.dates.includes(tk));
+    if(wi>=0){ state.monthIdx=mi; state.weekIdx=wi; return; }
+  }
+  state.monthIdx = state.groups.length-1;
+  state.weekIdx  = state.groups[state.monthIdx].weeks.length-1;
+}
+function curWeek(){ return state.groups[state.monthIdx].weeks[state.weekIdx]; }
+
+/* Minggu tampil jika sudah mulai, atau (sesuai CONFIG.showFuture) sudah terisi */
+function weekVisible(w){
+  const [d,m] = w.dates[0].split("/").map(Number);
+  const start = new Date(CONFIG.year, m-1, d);
+  const now = new Date(); now.setHours(0,0,0,0);
+  if(start <= now) return true;
+  if(CONFIG.showFuture === "always") return true;
+  if(CONFIG.showFuture === "never")  return false;
+  return w.rows.some(r => r.slice(2).some(s => s && String(s).trim()));
+}
+
+function renderMonths(){
+  const el = document.getElementById("months");
+  el.style.display = state.groups.length>1 ? "flex" : "none";
+  el.innerHTML = "";
+  state.groups.forEach((g,i)=>{
+    const b = document.createElement("button");
+    b.className = "month-chip" + (i===state.monthIdx?" active":"");
+    b.textContent = g.label;
+    b.onclick = ()=>{ state.monthIdx=i; state.weekIdx=0; state.open=null; renderAll(); };
+    el.appendChild(b);
+  });
+}
+function renderWeeks(){
+  const el = document.getElementById("weeks");
+  el.innerHTML = "";
+  state.groups[state.monthIdx].weeks.forEach((w,i)=>{
+    const b = document.createElement("button");
+    b.className = "week-chip" + (i===state.weekIdx?" active":"");
+    b.textContent = `Minggu ${i+1} · ${w.dates[0]}–${w.dates[w.dates.length-1]}`;
+    b.onclick = ()=>{ state.weekIdx=i; state.open=null; renderAll(); };
+    el.appendChild(b);
+  });
+}
+function renderLegend(){
+  const el = document.getElementById("legend");
+  el.innerHTML = LEGENDS[state.div].map(l=>
+    `<span class="lg"><b class="code-${l.code}">${l.code}</b>${l.label}</span>`).join("");
+}
+function chip(code){
+  const c = (code||"").toUpperCase().trim();
+  const known = ["M","MD","A","C","AL","OFF"];
+  const cls = known.includes(c) ? "code-"+c : "code-X";
+  return `<span class="chip ${cls}">${c||"–"}</span>`;
+}
+function renderGrid(){
+  const w = curWeek();
+  const tk = todayKey();
+  const grid = document.getElementById("grid");
+  let html = `<thead><tr><th class="name-h">Nama</th>`;
+  w.dates.forEach(d=>{
+    const t = d===tk ? " today" : "";
+    html += `<th class="${t}">${dayName(d)}<span class="d">${d.slice(0,2)}</span></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+  w.rows.forEach((r,ri)=>{
+    const [name,pos,...shifts] = r;
+    html += `<tr><td class="name" data-row="${ri}">
+      <div class="n">${name}</div><div class="p">${pos}</div></td>`;
+    shifts.forEach((s,si)=>{
+      const t = w.dates[si]===tk ? " today" : "";
+      html += `<td class="cell${t}">${chip(s)}</td>`;
+    });
+    html += `</tr>`;
+    if(state.open===ri){
+      const times = TIMES[state.div];
+      let rows = shifts.map((s,si)=>{
+        const c=(s||"").toUpperCase().trim();
+        const time = times[c] ? times[c] : (c==="AL"?"Annual Leave":c==="OFF"?"Libur":"–");
+        const t = w.dates[si]===tk ? " today":"";
+        return `<div class="row${t}"><span class="day">${dayName(w.dates[si])} ${w.dates[si]}</span>
+                <span>${chip(s)}</span><span class="time">${time}</span></div>`;
+      }).join("");
+      html += `<tr class="detail"><td colspan="${w.dates.length+1}"><div class="detail-in">${rows}</div></td></tr>`;
+    }
+  });
+  html += `</tbody>`;
+  grid.innerHTML = html;
+  grid.querySelectorAll("td.name").forEach(td=>{
+    td.onclick = ()=>{
+      const ri = Number(td.dataset.row);
+      state.open = state.open===ri ? null : ri;
+      renderGrid();
+    };
+  });
+}
+function renderAll(){ renderMonths(); renderWeeks(); renderLegend(); renderGrid(); }
+
+/* ===================== Google Sheets (gviz) ===================== */
+function normDate(s){
+  // "06/07" → apa adanya; "Date(2026,6,6)" (gviz) → "06/07"
+  const m = /^Date\((\d+),(\d+),(\d+)/.exec(s);
+  if(m) return String(m[3]).padStart(2,"0")+"/"+String(Number(m[2])+1).padStart(2,"0");
+  const p = s.split("/");
+  if(p.length>=2) return p[0].padStart(2,"0")+"/"+p[1].padStart(2,"0");
+  return s;
+}
+/* Pecah blok panjang (mis. 1 bulan penuh) jadi minggu-minggu, patah di hari Senin */
+function splitWeeks(b){
+  if(b.dates.length <= 7) return [b];
+  const cuts = [0];
+  for(let i=1; i<b.dates.length; i++){
+    const [d,m] = b.dates[i].split("/").map(Number);
+    if(new Date(CONFIG.year, m-1, d).getDay() === 1) cuts.push(i);
+  }
+  cuts.push(b.dates.length);
+  const out = [];
+  for(let c=0; c<cuts.length-1; c++){
+    const s = cuts[c], e = cuts[c+1];
+    if(e-s < 1) continue;
+    out.push({
+      dates: b.dates.slice(s,e),
+      rows: b.rows.map(r => [r[0], r[1], ...r.slice(2).slice(s,e)])
+    });
+  }
+  return out;
+}
+async function fetchGrid(tabName){
+  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(tabName)}`;
+  const txt = await (await fetch(url)).text();
+  const json = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}")+1));
+  return json.table.rows.map(r=>(r.c||[]).map(c=>(c&&c.v!=null)?String(c.v).trim():""));
+}
+/* Baris judul divisi: baris pendek (≤2 sel terisi) berisi kata kunci */
+const SECTIONS = [
+  {div:"foh",     re:/FOH|BAR/i},
+  {div:"kitchen", re:/KITCHEN|DAPUR/i}
+];
+function parseGrid(grid, defaultDiv){
+  const isDate = s => /^Date\(/.test(s) || /^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(s);
+  const out = {foh:[], kitchen:[]};
+  let div = defaultDiv || null, cur = null, col0 = -1, nDays = 0;
+  grid.forEach(cells=>{
+    const filledCells = cells.filter(c=>c && c.trim());
+    const di = cells.findIndex(isDate);
+    const isDateRow = di >= 0 && cells.slice(di, di+7).filter(isDate).length >= 5;
+    // deteksi judul divisi (mis. "FOH & BAR" atau "KITCHEN" di satu sel)
+    if(!isDateRow && filledCells.length > 0 && filledCells.length <= 2){
+      const joined = filledCells.join(" ");
+      const sec = SECTIONS.find(s => s.re.test(joined) && !/SHIFT|LEGEND/i.test(joined));
+      if(sec){ div = sec.div; cur = null; return; }
+    }
+    // baris tanggal (>=5 sel berpola tanggal berurutan) = awal blok baru
+    if(isDateRow){
+      let end = di;
+      while(end < cells.length && isDate(cells[end])) end++;
+      cur = {dates: cells.slice(di, end).map(normDate), rows: []};
+      col0 = di; nDays = cur.dates.length;
+      if(div) out[div].push(cur); else cur = null;
+      return;
+    }
+    if(!cur) return;
+    const name = (cells[col0-2] || "").trim();
+    const pos  = (cells[col0-1] || "").trim();
+    const shifts = [];
+    for(let i=0;i<nDays;i++) shifts.push(cells[col0+i] || "");
+    // skip baris kosong / legend / catatan
+    if(!name || /SHIFT|LEGEND/i.test(name) || shifts.filter(s=>s).length < 1) return;
+    cur.rows.push([name, pos, ...shifts]);
+  });
+  const finalize = blocks => blocks.filter(b=>b.rows.length).flatMap(splitWeeks);
+  return {foh: finalize(out.foh), kitchen: finalize(out.kitchen)};
+}
+let cache = null;
+function autoTabs(){
+  const now = new Date();
+  return [MONTHS_ID[(now.getMonth()+11)%12], MONTHS_ID[now.getMonth()]];
+}
+async function loadData(){
+  if(cache) return cache;
+  if(CONFIG.mode === "single"){
+    const tabs = CONFIG.singleTab === "AUTO" ? autoTabs() : [CONFIG.singleTab];
+    const merged = {foh:[], kitchen:[]};
+    let ok = false;
+    for(const t of tabs){
+      try{
+        const p = parseGrid(await fetchGrid(t), null);
+        merged.foh.push(...p.foh);
+        merged.kitchen.push(...p.kitchen);
+        if(p.foh.length || p.kitchen.length) ok = true;
+      }catch(e){ /* tab tidak ada (mis. bulan lalu) — lewati */ }
+    }
+    if(!ok) throw new Error("no data");
+    cache = merged;
+  }else{
+    const foh = parseGrid(await fetchGrid(CONFIG.tabs.foh), "foh");
+    const kit = parseGrid(await fetchGrid(CONFIG.tabs.kitchen), "kitchen");
+    cache = {foh: foh.foh, kitchen: kit.kitchen};
+  }
+  return cache;
+}
+async function loadDivision(div){
+  state.div = div; state.open = null;
+  let weeks;
+  if(CONFIG.sheetId){
+    try{
+      weeks = (await loadData())[div];
+      if(!weeks || !weeks.length) throw new Error("empty");
+      document.getElementById("demoBadge").hidden = true;
+    }catch(e){
+      cache = null; // supaya percobaan berikutnya fetch ulang
+      showErr("Gagal memuat data dari Google Sheets — menampilkan data contoh. Cek: sheet di-share 'Anyone with link', nama tab sesuai CONFIG, dan ada baris judul divisi (FOH & BAR / KITCHEN).");
+      weeks = DEMO[div];
+      document.getElementById("demoBadge").hidden = false;
+    }
+  }else{
+    weeks = DEMO[div];
+    document.getElementById("demoBadge").hidden = false;
+  }
+  state.groups = groupByMonth(weeks.filter(weekVisible));
+  if(!state.groups.length){
+    state.groups = groupByMonth(weeks.slice(0,1)); // fallback: minimal 1 minggu
+  }
+  pickCurrent();
+  renderAll();
+}
+function showErr(msg){
+  const el = document.getElementById("err");
+  el.textContent = msg; el.style.display = "block";
+}
+
+/* ===================== tabs ===================== */
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("err").style.display="none";
+    loadDivision(btn.dataset.div);
+  };
+});
+
+loadDivision("foh");
+</script>
+</body>
+</html>
