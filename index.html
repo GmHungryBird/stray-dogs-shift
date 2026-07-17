@@ -216,11 +216,6 @@
    Baris legend/catatan otomatis diabaikan.
    Tips: format kolom tanggal sebagai Plain text di Sheets.
    Spreadsheet harus di-share: Anyone with the link → Viewer.
-
-   PENAMAAN TAB: satu tab per bulan, format "BulanYY" TANPA spasi,
-   contoh: "Juli26", "Agustus26", "September26". Ini WAJIB konsisten
-   karena autoTabs() di bawah generate nama tab dari tanggal hari ini
-   memakai format yang sama persis.
    ========================================================= */
 const CONFIG = {
   sheetId: "1lxZeyaPp8iJWSSRRSv4koGv5589XWQvGatnVjYXNb0E",
@@ -228,10 +223,9 @@ const CONFIG = {
      ("FOH & BAR" di atas bloknya, "KITCHEN" di atas bloknya).
      mode "tabs": tiap divisi punya tab sendiri (FOH_BAR & KITCHEN). */
   mode: "single",
-  /* "AUTO" = baca tab bulan berjalan + bulan sebelumnya, format "BulanYY"
-     (mis. "Juli26", "Agustus26") — cocok dengan pola satu tab per bulan
-     yang dipakai di spreadsheet ini. Ganti ke nama tab spesifik (mis.
-     "JADWAL") kalau suatu saat polanya berubah jadi satu tab statis. */
+  /* "AUTO" = baca tab bernama bulan berjalan + bulan sebelumnya
+     ("Juli", "Agustus", ...). Cocok untuk pola satu tab per bulan.
+     Atau isi nama tab spesifik, mis. "JADWAL". */
   singleTab: "AUTO",
   /* ID "Publish to the web" (File → Share → Publish to web → Link).
      Dipakai sebagai jalur cadangan kalau jalur utama gagal.
@@ -606,23 +600,15 @@ function parseGrid(grid, defaultDiv){
   return {foh: finalize(out.foh), kitchen: finalize(out.kitchen)};
 }
 let cache = null;
-
-/* FIX: nama tab spreadsheet pakai format "BulanYY" tanpa spasi
-   (mis. "Juli26", "Agustus26"), BUKAN cuma nama bulan polos.
-   Generate nama tab bulan-berjalan & bulan-sebelumnya dengan format
-   yang sama persis, dan tangani pergantian tahun (Des → Jan). */
 function autoTabs(){
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const prevIdx = (now.getMonth() + 11) % 12; // bulan sebelumnya, 0-11
-  const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-  const prevYY = String(prevYear).slice(-2);
-  return [
-    MONTHS_ID[prevIdx] + prevYY,        // mis. "Juni26"
-    MONTHS_ID[now.getMonth()] + yy      // mis. "Juli26"
-  ];
+  const yy = String(now.getFullYear() % 100).padStart(2,"0");
+  const yyPrev = String(new Date(now.getFullYear(), now.getMonth()-1, 1).getFullYear() % 100).padStart(2,"0");
+  const prevMonth = MONTHS_ID[(now.getMonth()+11)%12];
+  const curMonth  = MONTHS_ID[now.getMonth()];
+  // pola tab: "Agustus26". Sertakan juga varian tanpa tahun sebagai cadangan.
+  return [prevMonth+yyPrev, curMonth+yy, prevMonth, curMonth];
 }
-
 /* Buang minggu dengan rentang tanggal yang sama persis, simpan kemunculan TERAKHIR
    (data yang difetch belakangan dianggap lebih baru/lebih dipercaya) */
 function dedupeWeeks(weeks){
@@ -642,9 +628,9 @@ async function loadData(){
         merged.foh.push(...p.foh);
         merged.kitchen.push(...p.kitchen);
         if(p.foh.length || p.kitchen.length) ok = true;
-      }catch(e){ /* tab tidak ada (mis. bulan lalu belum pernah dibuat) — lewati */ }
+      }catch(e){ /* tab tidak ada (mis. bulan lalu) — lewati */ }
     }
-    if(!ok) throw new Error("no data (cek nama tab: " + tabs.join(", ") + ")");
+    if(!ok) throw new Error("no data");
     merged.foh = dedupeWeeks(merged.foh);
     merged.kitchen = dedupeWeeks(merged.kitchen);
     cache = merged;
