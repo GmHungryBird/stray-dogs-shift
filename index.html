@@ -209,18 +209,22 @@
 /* =========================================================
    KONFIGURASI — isi SHEET_ID untuk mode live.
    Format tiap tab — sama seperti layout jadwal kamu sekarang:
-   Baris header blok : No | Name | Department | 06/07 | 07/07 | ... (7 tanggal)
+   Baris header blok : No | Name | Jabatan | 06/07 | 07/07 | ... (7 tanggal)
    Baris staf        : 1 | Teguh | Bar | MD | M | ... (7 kode shift)
    Satu blok = satu minggu. Minggu baru = tempel blok baru di bawah
    (boleh dipisah baris kosong). Kolom "No" opsional.
    Baris legend/catatan otomatis diabaikan.
+   Divisi (FOH/Kitchen) dideteksi otomatis dari ISI JABATAN staf di
+   tiap blok (mis. "Chef"/"Commis"/"Steward" → Kitchen, "Barista"/
+   "Floor"/"Bartender" → FOH) — jadi TIDAK bergantung ada/tidaknya
+   baris judul "FOH & BAR"/"KITCHEN" atau nama kolom header tertentu.
    Tips: format kolom tanggal sebagai Plain text di Sheets.
    Spreadsheet harus di-share: Anyone with the link → Viewer.
    ========================================================= */
 const CONFIG = {
   sheetId: "1lxZeyaPp8iJWSSRRSv4koGv5589XWQvGatnVjYXNb0E",
   /* mode "single": semua divisi dalam SATU tab, dipisah baris judul
-     ("FOH & BAR" di atas bloknya, "KITCHEN" di atas bloknya).
+     ("FOH & BAR" di atas bloknya, "KITCHEN" di atas bloknya) KALAU ADA.
      mode "tabs": tiap divisi punya tab sendiri (FOH_BAR & KITCHEN). */
   mode: "single",
   /* "AUTO" = baca tab bernama bulan berjalan + bulan sebelumnya
@@ -553,38 +557,50 @@ async function fetchGrid(tabName){
   }
   throw new Error(lastErr || "semua jalur gagal");
 }
-/* Baris judul divisi: baris pendek (≤2 sel terisi) berisi kata kunci */
+/* Baris judul divisi (opsional, kalau ADA di sheet): baris pendek
+   (≤2 sel terisi) berisi kata kunci FOH/BAR atau KITCHEN/DAPUR. */
 const SECTIONS = [
   {div:"foh",     re:/FOH|BAR/i},
   {div:"kitchen", re:/KITCHEN|DAPUR/i}
 ];
+/* Deteksi FOH vs Kitchen dari ISI JABATAN staf — dipakai kalau sheet
+   TIDAK punya baris judul terpisah (paling umum), atau sebagai
+   pengaman kalau baris judulnya kebetulan hilang/berubah. Lebih
+   tahan banting daripada mengandalkan teks header kolom (mis. sheet
+   Indonesia biasanya nulis "Jabatan" buat kedua divisi, jadi gak bisa
+   dipakai buat bedain FOH vs Kitchen). */
+const KITCHEN_ROLE_RE = /chef|commis|cook|kitchen|steward|trainee|dapur/i;
+const FOH_ROLE_RE = /bar\b|barista|bartender|floor|cafe|manager|waiter|waitress|server|host|kasir|cashier|\bfoh\b/i;
+function guessDivFromRoles(rows){
+  let k = 0, f = 0;
+  rows.forEach(r=>{
+    const pos = String(r[1] || "");
+    if(KITCHEN_ROLE_RE.test(pos)) k++;
+    else if(FOH_ROLE_RE.test(pos)) f++;
+  });
+  return k > f ? "kitchen" : "foh";
+}
 function parseGrid(grid, defaultDiv){
   const isDate = s => /^Date\(/.test(s) || /(^|\s)\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(String(s).trim());
-  const out = {foh:[], kitchen:[]};
-  let div = defaultDiv || null, cur = null, col0 = -1, nDays = 0;
+  const blocks = []; // {dates, rows, hintDiv}
+  let bannerDiv = defaultDiv || null, cur = null, col0 = -1, nDays = 0;
   grid.forEach(cells=>{
     const filledCells = cells.filter(c=>c && c.trim());
     const di = cells.findIndex(isDate);
     const isDateRow = di >= 0 && cells.slice(di, di+7).filter(isDate).length >= 5;
-    // deteksi judul divisi (mis. "FOH & BAR" atau "KITCHEN" di satu sel)
+    // deteksi judul divisi KALAU ADA (mis. "FOH & BAR" atau "KITCHEN" di satu sel)
     if(!isDateRow && filledCells.length > 0 && filledCells.length <= 2){
       const joined = filledCells.join(" ");
       const sec = SECTIONS.find(s => s.re.test(joined) && !/SHIFT|LEGEND/i.test(joined));
-      if(sec){ div = sec.div; cur = null; return; }
+      if(sec){ bannerDiv = sec.div; cur = null; return; }
     }
     // baris tanggal (>=5 sel berpola tanggal berurutan) = awal blok baru
     if(isDateRow){
       let end = di;
       while(end < cells.length && isDate(cells[end])) end++;
-      // deteksi divisi dari label kolom di header ("Department" / "Position")
-      // — tidak bergantung baris judul terpisah, jadi tahan kalau baris judul hilang
-      const label = String(cells[di - 1] || "").trim();
-      let blockDiv = div;
-      if(/position/i.test(label)) blockDiv = "kitchen";
-      else if(/department|divisi/i.test(label)) blockDiv = "foh";
-      cur = {dates: cells.slice(di, end).map(normDate), rows: []};
+      cur = {dates: cells.slice(di, end).map(normDate), rows: [], hintDiv: bannerDiv};
       col0 = di; nDays = cur.dates.length;
-      if(blockDiv){ out[blockDiv].push(cur); div = blockDiv; } else { cur = null; }
+      blocks.push(cur);
       return;
     }
     if(!cur) return;
@@ -596,7 +612,15 @@ function parseGrid(grid, defaultDiv){
     if(!name || /SHIFT|LEGEND/i.test(name) || shifts.filter(s=>s).length < 1) return;
     cur.rows.push([name, pos, ...shifts]);
   });
-  const finalize = blocks => blocks.filter(b=>b.rows.length).flatMap(splitWeeks);
+
+  // Tentukan divisi tiap blok: pakai hint dari baris judul kalau ada,
+  // kalau enggak baru tebak dari isi jabatan staf-nya.
+  const out = {foh:[], kitchen:[]};
+  blocks.filter(b=>b.rows.length).forEach(b=>{
+    const div = b.hintDiv || guessDivFromRoles(b.rows);
+    out[div].push(b);
+  });
+  const finalize = arr => arr.flatMap(splitWeeks);
   return {foh: finalize(out.foh), kitchen: finalize(out.kitchen)};
 }
 let cache = null;
